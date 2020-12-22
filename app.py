@@ -3,15 +3,11 @@ import re
 import psycopg2
 import psycopg2.extras
 import flask
-import string
-import random
 from collections import namedtuple
 from dotenv import load_dotenv
 
 load_dotenv()
 
-url_regex = re.compile(r'((http|https)://)?[a-zA-Z0-9./?:@\-_=#]+\.([a-zA-Z]){2,6}([a-zA-Z0-9.&/?:@\-_=#])*',
-                       re.IGNORECASE)
 app: flask.Flask = flask.Flask(__name__)
 
 database = psycopg2.connect(dbname=os.getenv("DB_NAME"),
@@ -23,22 +19,44 @@ database = psycopg2.connect(dbname=os.getenv("DB_NAME"),
 Response = namedtuple('Response', ['json', 'code'])
 server_error_response = Response(
     {"success": False, "message": "Internal Server Error - something went wrong while computing this request"}, 500)
-not_found_response = Response({"success": False, "message": "Not Found - this slug does not exist"}, 404)
+not_found_response = Response(
+    {"success": False, "message": "Not Found - this slug does not exist"}, 404)
+invalid_url_response = Response(
+    {"success": False, "message": "Bad Request - the 'link' field is not a valid URL"}, 400)
+invalid_slug_response = Response(
+    {"success": False, "message": "Bad Request - The slug can only contain letters, digits and hyphens."}, 400)
+
+
+def valid_slug(string: str) -> bool:
+    valid = 'abcdefghijklmnopqrstuvwxyz0123456789-'
+    return not any([letter not in valid for letter in string.lower()])
+
+
+def is_valid_url(url: str) -> bool:
+    regex = re.compile(r'[a-zA-z\d]*')
+    if bool(re.match(regex, url)) and url.startswith(('https://', 'http://')) and '.' in url:
+        return True
+    return False
 
 
 def create(body: dict, slug: str) -> Response:
     with database.cursor(cursor_factory=psycopg2.extras.NamedTupleCursor) as cur:
-        if 'link' not in body or type(body['link']) is not str:
+        if 'link' not in body or type(link := body['link']) is not str:
             return Response({"success": False,
                              "message": "Bad Request - please specify a string link redirect in the request body"}, 400)
-        if len(body['link']) > 100:
+        elif len(link) > 100:
             return Response({"success": False,
-                             "message": "Bad Request - link cannot be longer than 100 characters."}, 400)
+                             "message": "Bad Request - link cannot be longer than 100 characters"}, 400)
+        elif not is_valid_url(link):
+            return invalid_url_response
+        elif not valid_slug(slug):
+            return invalid_slug_response
         cur.execute('SELECT link FROM links WHERE slug = %s', (slug,))
         res = cur.fetchone()
         if res:
             return Response({"success": False, "message": "Bad Request - this slug already exists"}, 400)
-        cur.execute('INSERT INTO links (link, slug) VALUES (%s, %s)', (str(body['link']).lower(), str(slug)))
+        cur.execute('INSERT INTO links (link, slug) VALUES (%s, %s)', (str(link), str(slug)))
+        database.commit()
         return Response({"success": True, "payload": {"link": body['link'], "slug": slug}}, 201)
 
 
@@ -46,7 +64,7 @@ def get(slug: str) -> Response:
     with database.cursor(cursor_factory=psycopg2.extras.NamedTupleCursor) as cur:
         cur.execute('SELECT link FROM links WHERE slug = %s', (slug,))
         res = cur.fetchone()
-        if hasattr(res, 'link'):
+        if res:
             return Response({"success": True, "payload": {"link": res.link}}, 200)
         return not_found_response
 
@@ -57,39 +75,38 @@ def delete(slug: str) -> Response:
         res = cur.fetchone()
         if res:
             cur.execute('DELETE FROM links WHERE slug = %s', (slug,))
+            database.commit()
             return Response({"success": True, "message": "Success - short link deleted successfully"}, 204)
         return not_found_response
 
 
 def put(slug: str) -> Response:
     with database.cursor(cursor_factory=psycopg2.extras.NamedTupleCursor) as cur:
-        if 'link' not in flask.request.json or type(flask.request.json['link']) is not str:
+        if 'link' not in flask.request.json or type(link := flask.request.json['link']) is not str:
             return Response(
                 {"success": False,
                  "message": "Bad Request - body has to include a 'link' field of type 'string'."}, 400)
-        link: str = flask.request.json['link']
         if len(link) > 100:
             return Response({"success": False,
                              "message": "Bad Request - link cannot be longer than 100 characters"}, 400)
+        if not is_valid_url(link):
+            return invalid_url_response
         cur.execute('SELECT link FROM links WHERE slug = %s', (slug,))
         res = cur.fetchone()
         if res:
-            cur.execute('UPDATE links SET link = %s WHERE slug = %s', (str(link).lower(), slug))
+            cur.execute('UPDATE links SET link = %s WHERE slug = %s', (str(link), slug))
+            database.commit()
             return Response({"success": True, "message": "Success - link updated successfully."}, 204)
         return not_found_response
 
 
-def generate_slug(length: int = 5) -> str:
-    return ''.join(random.SystemRandom().choice(string.ascii_letters + string.digits) for _ in range(length))
-
-
 @app.route('/api/<slug>', methods=['GET', 'POST', 'DELETE', 'PUT'])
-def redirect(slug):
+def api_interaction(slug):
     response = server_error_response
     if flask.request.method == 'GET':
         response = get(slug)
     elif flask.request.method == 'POST':
-        response = create(dict(flask.request.json), slug)
+        response = create(flask.request.json, slug)
     elif flask.request.method == 'DELETE':
         response = delete(slug)
     elif flask.request.method == 'PUT':
@@ -98,7 +115,7 @@ def redirect(slug):
 
 
 @app.route('/<slug>', methods=['GET'])
-def home(slug):
+def redirect(slug):
     response: Response = get(slug)
     if response[1] == 200:
         return flask.redirect(response.json['payload']['link'])
@@ -106,4 +123,6 @@ def home(slug):
 
 
 if __name__ == '__main__':
-    app.run(port=int(os.getenv('PORT')))
+    port = int(os.getenv('PORT'))
+    print(f'Server started on port {port}')
+    app.run(port=port)
