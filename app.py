@@ -47,6 +47,11 @@ def create(body: dict, slug: str) -> Response:
         elif len(link) > 100:
             return Response({"success": False,
                              "message": "Bad Request - link cannot be longer than 100 characters"}, 400)
+        elif type(link) is not str:
+            return Response({
+                "success": False,
+                "message": "Bad Request - link must be of type 'string'."
+            }, 400)
         elif not is_valid_url(link):
             return invalid_url_response
         elif not is_valid_slug(slug):
