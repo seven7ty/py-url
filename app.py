@@ -68,7 +68,6 @@ def redirect(slug):
     if flask.request.method == 'GET':
         response = get(slug)
     elif flask.request.method == 'POST':
-        print(flask.request.data)
         response = create(dict(flask.request.json), slug)
     elif flask.request.method == 'DELETE':
         response = delete(slug)
