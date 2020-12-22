@@ -122,6 +122,11 @@ def redirect(slug):
     return 'This doesn\'t exist.'
 
 
+@app.route('/', methods=['GET'])
+def home():
+    return 'This is the homepage.'
+
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT'))
     print(f'Server started on port {port}')
