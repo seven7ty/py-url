@@ -27,9 +27,9 @@ invalid_slug_response = Response(
     {"success": False, "message": "Bad Request - The slug can only contain letters, digits and hyphens."}, 400)
 
 
-def valid_slug(string: str) -> bool:
-    valid = 'abcdefghijklmnopqrstuvwxyz0123456789-'
-    return not any([letter not in valid for letter in string.lower()])
+def is_valid_slug(string: str) -> bool:
+    valid = re.compile(r'[a-z\d-]', re.IGNORECASE)
+    return bool(re.match(valid, string))
 
 
 def is_valid_url(url: str) -> bool:
@@ -49,7 +49,7 @@ def create(body: dict, slug: str) -> Response:
                              "message": "Bad Request - link cannot be longer than 100 characters"}, 400)
         elif not is_valid_url(link):
             return invalid_url_response
-        elif not valid_slug(slug):
+        elif not is_valid_slug(slug):
             return invalid_slug_response
         cur.execute('SELECT link FROM links WHERE slug = %s', (slug,))
         res = cur.fetchone()
