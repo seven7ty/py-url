@@ -57,7 +57,7 @@ def create(body: dict, slug: str) -> Response:
             return Response({"success": False, "message": "Bad Request - this slug already exists"}, 400)
         cur.execute('INSERT INTO links (link, slug) VALUES (%s, %s)', (str(link), str(slug)))
         database.commit()
-        return Response({"success": True, "payload": {"link": body['link'], "slug": slug}}, 201)
+        return Response({"success": True, "message": "Success - short link created"}, 201)
 
 
 def get(slug: str) -> Response:
@@ -124,7 +124,7 @@ def redirect(slug):
 
 @app.route('/', methods=['GET'])
 def home():
-    return 'This is the homepage.'
+    return flask.render_template('home.html')
 
 
 if __name__ == '__main__':
