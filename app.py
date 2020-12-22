@@ -62,7 +62,7 @@ def generate_slug(length: int = 5) -> str:
     return ''.join(random.SystemRandom().choice(string.ascii_letters + string.digits) for _ in range(length))
 
 
-@app.route('/<slug>', methods=['GET', 'POST', 'DELETE'])
+@app.route('/api/<slug>', methods=['GET', 'POST', 'DELETE', 'PUT'])
 def redirect(slug):
     response = server_error_response
     if flask.request.method == 'GET':
@@ -74,9 +74,12 @@ def redirect(slug):
     return flask.jsonify(response.json), response.code
 
 
-@app.route('/', methods=['GET'])
-def home():
-    return flask.jsonify({})
+@app.route('/<slug>', methods=['GET'])
+def home(slug):
+    response: Response = get(slug)
+    if response[1] == 200:
+        return flask.redirect(response.json['payload']['link'])
+    return 'This doesn\'t exist.'
 
 
 if __name__ == '__main__':
