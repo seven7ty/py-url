@@ -124,7 +124,7 @@ def redirect(slug):
     response: Response = get(slug)
     if response[1] == 200:
         return flask.redirect(response.json['payload']['link'])
-    return 'This doesn\'t exist.'
+    return flask.render_template('bad-link.html')
 
 
 @app.route('/', methods=['GET'])
