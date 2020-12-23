@@ -128,8 +128,8 @@ def api_interaction(slug):
 @app.route('/<slug>', methods=['GET'])
 def redirect(slug):
     response: Response = get(slug)
-    if response[1] == 200:
-        return flask.redirect(response.json['payload']['link']), 200
+    if response.code == 200:
+        return flask.redirect(response.json['payload']['link'])
     return flask.render_template('bad-link.html'), 404
 
 
