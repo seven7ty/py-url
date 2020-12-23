@@ -143,6 +143,11 @@ def internal_server_error(e):
     return flask.render_template('500.html'), 500
 
 
+@app.errorhandler(403)
+def forbidden(e):
+    return flask.render_template('403.html'), 403
+
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT'))
     print(f'Server started on port {port}')
