@@ -60,17 +60,23 @@ def create(body: dict, slug: str) -> Response:
         res = cur.fetchone()
         if res:
             return Response({"success": False, "message": "Bad Request - this slug already exists"}, 400)
-        cur.execute('INSERT INTO links (link, slug) VALUES (%s, %s)', (str(link), str(slug)))
+        cur.execute('INSERT INTO links (link, slug, visits, created_at) VALUES (%s, %s, %s, now())',
+                    (str(link), str(slug), '0'))
         database.commit()
         return Response({"success": True, "message": "Success - short link created"}, 201)
 
 
 def get(slug: str) -> Response:
     with database.cursor(cursor_factory=psycopg2.extras.NamedTupleCursor) as cur:
-        cur.execute('SELECT link FROM links WHERE slug = %s', (slug,))
+        cur.execute('SELECT link, visits, EXTRACT(EPOCH FROM created_at) FROM links WHERE slug = %s', (slug,))
         res = cur.fetchone()
         if res:
-            return Response({"success": True, "payload": {"link": res.link}}, 200)
+            cur.execute('UPDATE links SET visits = visits + 1 WHERE slug = %s', (slug,))
+            database.commit()
+            return Response({"success": True,
+                             "payload": {"link": res.link,
+                                         "visits": int(res.visits) + 1,
+                                         "created_at": int(res.date_part)}}, 200)
         return not_found_response
 
 
@@ -123,13 +129,18 @@ def api_interaction(slug):
 def redirect(slug):
     response: Response = get(slug)
     if response[1] == 200:
-        return flask.redirect(response.json['payload']['link'])
-    return flask.render_template('bad-link.html')
+        return flask.redirect(response.json['payload']['link']), 200
+    return flask.render_template('bad-link.html'), 404
 
 
 @app.route('/', methods=['GET'])
 def home():
-    return flask.render_template('home.html')
+    return flask.render_template('home.html'), 200
+
+
+@app.errorhandler(500)
+def internal_server_error(e):
+    return flask.render_template('500.html'), 500
 
 
 if __name__ == '__main__':
